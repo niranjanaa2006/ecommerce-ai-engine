@@ -6,11 +6,29 @@ export const getRecommendations = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { category } = req.body;
+    const productId = req.params.productId;
 
-    const products = await Product.find({ category });
+    // find current product
+    const currentProduct = await Product.findById(productId);
 
-    res.status(200).json(products);
+    if (!currentProduct) {
+      res.status(404).json({
+        message: "Product not found",
+      });
+      return;
+    }
+
+    // recommend similar category products
+    const recommendations = await Product.find({
+      category: currentProduct.category,
+      _id: { $ne: productId },   // exclude current product
+    }).limit(4);
+
+    res.status(200).json({
+      recommendedFor: currentProduct.name,
+      recommendations,
+    });
+
   } catch (error) {
     res.status(500).json({
       message: "Server Error",

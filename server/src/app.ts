@@ -8,6 +8,7 @@ const app = express();
 app.use(express.json());
 
 app.get("/", (req, res) => {
+  console.log("ROOT ROUTE HIT");
   res.send("Ecommerce AI Engine API Running");
 });
 

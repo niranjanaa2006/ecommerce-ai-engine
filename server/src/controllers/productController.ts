@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import Product from "../models/product";
+import redisClient from "../config/redis";
 
 export const createProduct = async (
   req: Request,
@@ -24,7 +25,22 @@ export const getProducts = async (
   res: Response
 ): Promise<void> => {
   try {
-    const products = await Product.find();
+    const { category, keyword } = req.query;
+
+    let query: any = {};
+
+    if (category) {
+      query.category = category;
+    }
+
+    if (keyword) {
+      query.name = {
+        $regex: keyword,
+        $options: "i",
+      };
+    }
+
+    const products = await Product.find(query);
 
     res.status(200).json(products);
   } catch (error) {
