@@ -9,6 +9,9 @@ export const createProduct = async (
   try {
     const product = await Product.create(req.body);
 
+    await redisClient.del("products");
+    console.log("Redis cache cleared after create");
+
     res.status(201).json({
       message: "Product created successfully",
       product,
@@ -25,6 +28,15 @@ export const getProducts = async (
   res: Response
 ): Promise<void> => {
   try {
+    // check cache first
+    const cachedProducts = await redisClient.get("products");
+
+    if (cachedProducts) {
+      console.log("Serving from Redis Cache");
+      res.status(200).json(JSON.parse(cachedProducts));
+      return;
+    }
+
     const { category, keyword } = req.query;
 
     let query: any = {};
@@ -41,6 +53,15 @@ export const getProducts = async (
     }
 
     const products = await Product.find(query);
+
+    // save in redis for 60 sec
+    await redisClient.setEx(
+      "products",
+      60,
+      JSON.stringify(products)
+    );
+
+    console.log("Serving from MongoDB");
 
     res.status(200).json(products);
   } catch (error) {
@@ -79,7 +100,7 @@ export const updateProduct = async (
       req.params.id,
       req.body,
       {
-        new: true,
+        returnDocument: "after",
       }
     );
 
@@ -89,6 +110,10 @@ export const updateProduct = async (
       });
       return;
     }
+
+    // clear redis cache
+    await redisClient.del("products");
+    console.log("Redis cache cleared after update");
 
     res.status(200).json({
       message: "Product updated successfully",
@@ -113,6 +138,10 @@ export const deleteProduct = async (
       });
       return;
     }
+
+    // clear redis cache
+    await redisClient.del("products");
+    console.log("Redis cache cleared after delete");
 
     res.status(200).json({
       message: "Product deleted successfully",
