@@ -28,16 +28,7 @@ export const getProducts = async (
   res: Response
 ): Promise<void> => {
   try {
-    // check cache first
-    const cachedProducts = await redisClient.get("products");
-
-    if (cachedProducts) {
-      console.log("Serving from Redis Cache");
-      res.status(200).json(JSON.parse(cachedProducts));
-      return;
-    }
-
-    const { category, keyword } = req.query;
+    const { category, keyword, page = "1", limit = "5" } = req.query;
 
     let query: any = {};
 
@@ -52,11 +43,26 @@ export const getProducts = async (
       };
     }
 
-    const products = await Product.find(query);
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
 
-    // save in redis for 60 sec
+    const cacheKey = `products:${category || "all"}:${keyword || "none"}:${page}:${limit}`;
+
+    // check redis cache
+    const cachedProducts = await redisClient.get(cacheKey);
+
+    if (cachedProducts) {
+      console.log("Serving from Redis Cache");
+      res.status(200).json(JSON.parse(cachedProducts));
+      return;
+    }
+
+    const products = await Product.find(query)
+      .skip((pageNumber - 1) * limitNumber)
+      .limit(limitNumber);
+
     await redisClient.setEx(
-      "products",
+      cacheKey,
       60,
       JSON.stringify(products)
     );
@@ -64,12 +70,14 @@ export const getProducts = async (
     console.log("Serving from MongoDB");
 
     res.status(200).json(products);
+
   } catch (error) {
     res.status(500).json({
       message: "Server Error",
     });
   }
 };
+
 export const getProductById = async (
   req: Request,
   res: Response
