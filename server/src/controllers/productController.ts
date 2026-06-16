@@ -9,7 +9,11 @@ export const createProduct = async (
   try {
     const product = await Product.create(req.body);
 
-    await redisClient.del("products");
+    const keys = await redisClient.keys("products:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+
     console.log("Redis cache cleared after create");
 
     res.status(201).json({
@@ -28,7 +32,7 @@ export const getProducts = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { category, keyword, page = "1", limit = "5" } = req.query;
+    const { category, keyword, page = "1", limit = "5",sort } = req.query;
 
     let query: any = {};
 
@@ -46,7 +50,21 @@ export const getProducts = async (
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
 
-    const cacheKey = `products:${category || "all"}:${keyword || "none"}:${page}:${limit}`;
+    let sortOption: any = {};
+
+if (sort === "price_asc") {
+  sortOption = { price: 1 };
+}
+
+if (sort === "price_desc") {
+  sortOption = { price: -1 };
+}
+
+if (sort === "rating_desc") {
+  sortOption = { rating: -1 };
+}
+
+    const cacheKey = `products:${category || "all"}:${keyword || "none"}:${page}:${limit}:${sort || "none"}`;
 
     // check redis cache
     const cachedProducts = await redisClient.get(cacheKey);
@@ -58,6 +76,7 @@ export const getProducts = async (
     }
 
     const products = await Product.find(query)
+      .sort(sortOption)
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber);
 
@@ -120,7 +139,11 @@ export const updateProduct = async (
     }
 
     // clear redis cache
-    await redisClient.del("products");
+    const keys = await redisClient.keys("products:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+
     console.log("Redis cache cleared after update");
 
     res.status(200).json({
@@ -148,12 +171,32 @@ export const deleteProduct = async (
     }
 
     // clear redis cache
-    await redisClient.del("products");
+    const keys = await redisClient.keys("products:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
     console.log("Redis cache cleared after delete");
 
     res.status(200).json({
       message: "Product deleted successfully",
     });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+export const getProductCount = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const count = await Product.countDocuments();
+
+    res.status(200).json({
+      totalProducts: count,
+    });
+
   } catch (error) {
     res.status(500).json({
       message: "Server Error",
