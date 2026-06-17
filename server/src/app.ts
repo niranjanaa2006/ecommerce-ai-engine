@@ -4,6 +4,7 @@ import authRoutes from "./routes/authRoutes";
 import productRoutes from "./routes/productRoutes";
 import recommendationRoutes from "./routes/recommendationRoutes";
 import activityRoutes from "./routes/activityRoutes";
+import cartRoutes from "./routes/cartRoutes";
 
 const limiter = rateLimit({
   windowMs: 15* 60 * 1000,   // 15 minutes
@@ -25,5 +26,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/activity", activityRoutes);
+app.use("/api/cart", cartRoutes);
 
 export default app;
