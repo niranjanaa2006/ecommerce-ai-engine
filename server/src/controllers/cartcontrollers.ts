@@ -58,15 +58,30 @@ export const getCartTotal = async (
 
     let totalAmount = 0;
 
+    // calculate total
     cartItems.forEach((item: any) => {
       const product = item.productId;
-
       totalAmount += product.price * item.quantity;
     });
+
+    // discount rules
+    let discount = 0;
+
+    if (totalAmount > 100000) {
+      discount = totalAmount * 0.20;   // 20% discount
+    } 
+    else if (totalAmount > 50000) {
+      discount = totalAmount * 0.10;   // 10% discount
+    }
+
+    // final payable amount
+    const finalAmount = totalAmount - discount;
 
     res.status(200).json({
       cartItems,
       totalAmount,
+      discount,
+      finalAmount,
     });
 
   } catch (error) {
