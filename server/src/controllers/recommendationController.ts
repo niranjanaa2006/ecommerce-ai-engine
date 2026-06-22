@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import Product from "../models/product";
 import UserActivity from "../models/userActivity";
-
+import redisClient from "../config/redis";
 
 export const getRecommendations = async (
   req: Request,
@@ -23,7 +23,7 @@ export const getRecommendations = async (
     // recommend similar category products
     const recommendations = await Product.find({
       category: currentProduct.category,
-      _id: { $ne: productId },   // exclude current product
+      _id: { $ne: productId }, // exclude current product
     }).limit(4);
 
     res.status(200).json({
@@ -38,7 +38,6 @@ export const getRecommendations = async (
   }
 };
 
-
 export const getUserRecommendations = async (
   req: Request,
   res: Response
@@ -46,10 +45,24 @@ export const getUserRecommendations = async (
   try {
     const userId = req.params.userId as string;
 
-    // get all viewed products by user
-    
-      const activities = await UserActivity.find({userId,
-      action: "view",
+    // redis cache key
+    const cacheKey = `recommendations:${userId}`;
+
+    // check redis cache first
+    const cachedRecommendations = await redisClient.get(cacheKey);
+
+    if (cachedRecommendations) {
+      console.log("Serving Recommendations from Redis");
+
+      res.status(200).json(
+        JSON.parse(cachedRecommendations)
+      );
+      return;
+    }
+
+    // get all user activities
+    const activities = await UserActivity.find({
+      userId,
     }).populate("productId");
 
     if (activities.length === 0) {
@@ -59,32 +72,57 @@ export const getUserRecommendations = async (
       return;
     }
 
-    // count categories
+    // category score count
     const categoryCount: any = {};
 
     activities.forEach((activity: any) => {
       const product = activity.productId;
 
+      let score = 0;
+
+      if (activity.action === "view") {
+        score = 1;
+      } else if (activity.action === "click") {
+        score = 2;
+      } else if (activity.action === "purchase") {
+        score = 5;
+      }
+
       if (product?.category) {
         categoryCount[product.category] =
-          (categoryCount[product.category] || 0) + 1;
+          (categoryCount[product.category] || 0) + score;
       }
     });
 
     // find favorite category
-    const favoriteCategory = Object.keys(categoryCount).reduce((a, b) =>
-      categoryCount[a] > categoryCount[b] ? a : b
+    const favoriteCategory = Object.keys(categoryCount).reduce(
+      (a, b) =>
+        categoryCount[a] > categoryCount[b] ? a : b
     );
 
-    // recommend products from favorite category
+    // recommend best products from favorite category
     const recommendations = await Product.find({
       category: favoriteCategory,
-    }).limit(5);
+      isAvailable: true,
+    })
+      .sort({ rating: -1 }) // highest rating first
+      .limit(5);
 
-    res.status(200).json({
+    const responseData = {
       favoriteCategory,
       recommendations,
-    });
+    };
+
+    // save recommendations in redis
+    await redisClient.setEx(
+      cacheKey,
+      60,
+      JSON.stringify(responseData)
+    );
+
+    console.log("Serving Recommendations from MongoDB");
+
+    res.status(200).json(responseData);
 
   } catch (error) {
     res.status(500).json({
