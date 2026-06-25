@@ -1,8 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
+interface AuthRequest extends Request {
+  user?: string;
+}
+
 export const protect = (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): void => {
@@ -17,17 +21,17 @@ export const protect = (
 
   const token = authHeader.split(" ")[1];
 
-  if (!token) {
-    res.status(401).json({
-      message: "Token missing",
-    });
-    return;
-  }
-
   try {
-    jwt.verify(token, process.env.JWT_SECRET!);
+    const decoded = jwt.verify(
+      token as string,
+      String(process.env.JWT_SECRET)
+    ) as any;
+
+    // save logged in user id
+    req.user = decoded.id;
 
     next();
+
   } catch (error) {
     res.status(401).json({
       message: "Invalid token",

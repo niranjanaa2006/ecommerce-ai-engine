@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import Cart from "../models/cart";
 import Product from "../models/product";
 
+// Add to Cart
 export const addToCart = async (
   req: Request,
   res: Response
@@ -37,6 +38,8 @@ export const addToCart = async (
     });
   }
 };
+
+// Get Cart Total
 export const getCartTotal = async (
   req: Request,
   res: Response
@@ -44,7 +47,7 @@ export const getCartTotal = async (
   try {
     const userId = req.params.userId as string;
 
-    // get all cart items for user
+    // get cart items
     const cartItems = await Cart.find({
       userId,
     }).populate("productId");
@@ -68,13 +71,11 @@ export const getCartTotal = async (
     let discount = 0;
 
     if (totalAmount > 100000) {
-      discount = totalAmount * 0.20;   // 20% discount
-    } 
-    else if (totalAmount > 50000) {
-      discount = totalAmount * 0.10;   // 10% discount
+      discount = totalAmount * 0.20;
+    } else if (totalAmount > 50000) {
+      discount = totalAmount * 0.10;
     }
 
-    // final payable amount
     const finalAmount = totalAmount - discount;
 
     res.status(200).json({
@@ -90,6 +91,8 @@ export const getCartTotal = async (
     });
   }
 };
+
+// Purchase Cart
 export const purchaseCart = async (
   req: Request,
   res: Response
@@ -98,7 +101,9 @@ export const purchaseCart = async (
     const userId = req.params.userId as string;
 
     // get cart items
-    const cartItems = await Cart.find({ userId }).populate("productId");
+    const cartItems = await Cart.find({
+      userId,
+    }).populate("productId");
 
     if (cartItems.length === 0) {
       res.status(404).json({
@@ -107,11 +112,10 @@ export const purchaseCart = async (
       return;
     }
 
-    // check stock and update inventory
+    // check stock + update inventory safely
     for (const item of cartItems as any[]) {
       const product = item.productId;
 
-      // check stock availability
       if (product.stock < item.quantity) {
         res.status(400).json({
           message: `Not enough stock for ${product.name}`,
@@ -119,13 +123,16 @@ export const purchaseCart = async (
         return;
       }
 
-      // reduce stock
-      await Product.findByIdAndUpdate(product._id, {
-        stock: product.stock - item.quantity,
-      });
+      // atomic stock decrement
+      await Product.findByIdAndUpdate(
+        product._id,
+        {
+          $inc: { stock: -item.quantity },
+        }
+      );
     }
 
-    // clear cart after purchase
+    // clear cart
     await Cart.deleteMany({ userId });
 
     res.status(200).json({
