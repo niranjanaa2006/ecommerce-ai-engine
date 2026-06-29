@@ -31,8 +31,15 @@ export const getProducts = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  // TEMP TEST for global error middleware
+  throw new Error("Testing global error middleware");
+
   try {
-    const { category, keyword, page = "1", limit = "5",sort } = req.query;
+    const category = req.query.category as string;
+    const keyword = req.query.keyword as string;
+    const page = (req.query.page as string) || "1";
+    const limit = (req.query.limit as string) || "5";
+    const sort = req.query.sort as string;
 
     let query: any = {};
 
@@ -52,36 +59,42 @@ export const getProducts = async (
 
     let sortOption: any = {};
 
-if (sort === "price_asc") {
-  sortOption = { price: 1 };
-}
-
-if (sort === "price_desc") {
-  sortOption = { price: -1 };
-}
-
-if (sort === "rating_desc") {
-  sortOption = { rating: -1 };
-}
-
-    const cacheKey = `products:${category || "all"}:${keyword || "none"}:${page}:${limit}:${sort || "none"}`;
-
-    // check redis cache
-    const cachedProducts = await redisClient.get(cacheKey);
-
-    if (cachedProducts) {
-      console.log("Serving from Redis Cache");
-      res.status(200).json(JSON.parse(cachedProducts));
-      return;
+    if (sort === "price_asc") {
+      sortOption = { price: 1 };
     }
 
+    if (sort === "price_desc") {
+      sortOption = { price: -1 };
+    }
+
+    if (sort === "rating_desc") {
+      sortOption = { rating: -1 };
+    }
+
+    const cacheKey: string = String(
+      `products:${category || "all"}:${keyword || "none"}:${page}:${limit}:${sort || "none"}`
+    );
+
+    // check redis cache
+    const cachedProducts = await redisClient.get(
+      String(cacheKey)
+    );
+if (cachedProducts !== null) {
+  console.log("Serving from Redis Cache");
+
+  res.status(200).json(
+    JSON.parse(String(cachedProducts))
+  );
+
+  return;
+}
     const products = await Product.find(query)
       .sort(sortOption)
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber);
 
     await redisClient.setEx(
-      cacheKey,
+      String(cacheKey),
       60,
       JSON.stringify(products)
     );
@@ -118,6 +131,7 @@ export const getProductById = async (
     });
   }
 };
+
 export const updateProduct = async (
   req: Request,
   res: Response
@@ -156,6 +170,7 @@ export const updateProduct = async (
     });
   }
 };
+
 export const deleteProduct = async (
   req: Request,
   res: Response
@@ -175,6 +190,7 @@ export const deleteProduct = async (
     if (keys.length > 0) {
       await redisClient.del(keys);
     }
+
     console.log("Redis cache cleared after delete");
 
     res.status(200).json({
@@ -186,6 +202,7 @@ export const deleteProduct = async (
     });
   }
 };
+
 export const getProductCount = async (
   req: Request,
   res: Response
